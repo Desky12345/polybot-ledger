@@ -355,12 +355,16 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     }).join('') + '</div>';
   }
 
+  let lastHistory = null, resizeT = null;
+  window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (lastHistory) renderChart(lastHistory); }, 150); });
   function renderChart(data){
+    lastHistory = data;
     const box = $('chart');
     if (!data || !Array.isArray(data.equity) || data.equity.length < 2){ box.innerHTML = '<div class="empty">Not enough history yet. The bot records a point every 30 minutes.</div>'; return; }
     const pts = data.equity.slice().sort((a,b) => a.ts - b.ts);
     const flows = (data.flows || []).filter(f => f.kind !== 'opening').sort((a,b) => a.ts - b.ts);
-    const W = 720, H = 260, L = 44, R = 64, T = 18, B = 26;
+    const narrow = box.clientWidth < 520;
+    const W = Math.max(320, box.clientWidth - 16), H = narrow ? 230 : 260, L = 44, R = narrow ? 52 : 64, T = 18, B = 26;
     const x0 = pts[0].ts, x1 = pts[pts.length-1].ts;
     const ys = pts.map(p => p.total);
     let lo = Math.min(...ys), hi = Math.max(...ys);
@@ -422,8 +426,8 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     set('t-trading', usd(trading, true), cls(trading));
     $('t-trading-sub').textContent = net > 0 ? pct(trading / net * 100) + ' on money added' : 'equity minus money added';
     set('t-flows', usd(net));
-    const deps = flows.filter(f => f.kind !== 'withdrawal').length, wds = flows.filter(f => f.kind === 'withdrawal').length;
-    $('t-flows-sub').textContent = deps + ' deposit' + (deps === 1 ? '' : 's') + (wds ? ', ' + wds + ' withdrawal' + (wds === 1 ? '' : 's') : '');
+    const deps = flows.filter(f => f.kind === 'deposit').length, wds = flows.filter(f => f.kind === 'withdrawal').length, open = flows.some(f => f.kind === 'opening');
+    $('t-flows-sub').textContent = (open ? 'opening balance + ' : '') + deps + ' deposit' + (deps === 1 ? '' : 's') + (wds ? ', ' + wds + ' withdrawal' + (wds === 1 ? '' : 's') : '');
   }
 
   function setBanner(fails){
