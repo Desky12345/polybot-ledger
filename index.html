@@ -471,7 +471,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     const watch = recent.length ? '<div class="list" style="margin-top:10px">' + recent.slice(0, 6).map(r => {
       const when = new Date(r.window).toLocaleString('en-US',{weekday:'short', hour:'numeric', minute:'2-digit'});
       const locked = (r.side === 'Up' ? 'Up' : 'Down') + ' locked by $' + Math.abs(Math.round(r.gap));
-      const why = r.act ? 'bought' : (r.ask == null ? 'no offer' : 'market asked ' + price(r.ask) + ', too expensive');
+      const why = r.act ? 'bought' : (r.reason === 'not locked enough' || (r.reason == null && r.ask == null) ? 'not locked far enough to be safe' + (r.ask != null ? ' (market ' + price(r.ask) + ')' : '') : (r.ask == null ? 'no offer' : 'market asked ' + price(r.ask) + ', too expensive'));
       return '<div class="row"><div class="t">' + esc(when) + '</div><div class="m">' + esc(locked) + '<small>' + esc(why) + '</small></div><div class="r">' + (r.act ? '<span class="chip yes">TRADE</span>' : '<span class="chip side">PASS</span>') + '</div></div>';
     }).join('') + '</div>' : '';
     if (!t.length){ box.innerHTML = '<div class="empty">No sniper trades yet. It only fires when a window is already decided but still priced under 94\u00a2.</div>' + watch; return; }
