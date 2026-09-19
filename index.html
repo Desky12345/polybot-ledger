@@ -1,3 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="robots" content="noindex,nofollow">
 <title>Polybot Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -89,9 +97,57 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
 .note{font-size:12px;color:var(--ink-3);margin-top:8px}
 .skeleton{color:var(--ink-3)}
 @media (prefers-reduced-motion:no-preference){.tile .val{transition:color .2s}}
+/* lock screen */
+#lock{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+#lock[hidden]{display:none}
+.lockcard{width:100%;max-width:340px;text-align:center}
+.lockcard h1{font-size:20px;margin:0 0 4px}
+.lockcard p{color:var(--ink-2);margin:0 0 18px;font-size:13px}
+.pin{display:flex;gap:10px;justify-content:center;margin:14px 0 18px}
+.pin span{width:14px;height:14px;border-radius:50%;border:2px solid var(--line-strong);display:inline-block}
+.pin span.on{background:var(--ink);border-color:var(--ink)}
+.pin.err span{border-color:var(--bad);animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.keys{display:grid;grid-template-columns:repeat(3,72px);gap:10px;justify-content:center}
+.keys button{font:inherit;font-size:22px;height:64px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;touch-action:manipulation}
+.keys button:active{background:var(--surface-2)}
+.keys button.txt{font-size:13px;color:var(--ink-2)}
+.faceid{margin-top:16px;font:inherit;font-size:14px;font-weight:500;color:var(--accent);background:var(--accent-soft);border:0;border-radius:10px;padding:12px 16px;width:100%;cursor:pointer}
+.faceid[hidden]{display:none}
+.lockmsg{font-size:12px;color:var(--ink-3);margin-top:12px;min-height:16px}
+/* positions as cards on phones */
+.cards{display:none}
+@media (max-width:640px){
+  .tablewrap{display:none}
+  .cards{display:grid;gap:10px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card .ttl{font-weight:500;line-height:1.35;margin-bottom:8px}
+  .card .ttl a{color:var(--ink);text-decoration:none}
+  .card .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 10px;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+  .card .grid small{display:block;font-family:var(--font);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+  .card .pl{font-size:15px;font-weight:500}
+  header.top .addr{display:none}
+  .tile .val{font-size:19px}
+  .row{grid-template-columns:52px minmax(0,1fr) auto;padding:9px 10px}
+}
 </style>
 
-<div class="wrap">
+<div id="lock">
+  <div class="lockcard">
+    <h1>Polybot Ledger</h1>
+    <p>Enter passcode</p>
+    <div class="pin" id="pin"><span></span><span></span><span></span><span></span></div>
+    <div class="keys" id="keys">
+      <button type="button">1</button><button type="button">2</button><button type="button">3</button>
+      <button type="button">4</button><button type="button">5</button><button type="button">6</button>
+      <button type="button">7</button><button type="button">8</button><button type="button">9</button>
+      <button type="button" class="txt" data-k="clear">Clear</button><button type="button">0</button><button type="button" class="txt" data-k="del">&#x232B;</button>
+    </div>
+    <button type="button" class="faceid" id="faceid" hidden>Unlock with Face ID</button>
+    <div class="lockmsg" id="lockmsg"></div>
+  </div>
+</div>
+<div class="wrap" id="app" hidden>
   <header class="top">
     <div>
       <h1>Polybot Ledger</h1>
@@ -131,7 +187,6 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     <div id="trades"><div class="empty skeleton">Loading&#x2026;</div></div>
   </section>
 </div>
-
 <script>
 (function(){
   const ADDR = '0xe5fa19af8d26f8ad6efd7d3ec1f5f34f2fc7939f';
@@ -227,9 +282,23 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
         '<td>' + dateShort(p.endDate) + '</td>' +
         '</tr>';
     }).join('');
+    const cards = list.map(p => {
+      const resolved = p.redeemable || p.curPrice === 0 || p.curPrice === 1;
+      const side = String(p.outcome || '').toUpperCase();
+      const sideCls = /^(YES|UP)$/.test(side) ? 'yes' : (/^(NO|DOWN)$/.test(side) ? 'no' : 'side');
+      return '<div class="card"><div class="ttl"><a href="' + mktUrl(p) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a> <span class="chip ' + sideCls + '">' + esc(side) + '</span>' + (resolved ? '<span class="chip resolved">Resolved</span>' : '') + '</div>' +
+        '<div class="grid">' +
+        '<div><small>P&amp;L</small><span class="pl ' + cls(p.cashPnl) + '">' + usd(p.cashPnl, true) + '</span></div>' +
+        '<div><small>Value</small>' + usd(p.currentValue) + '</div>' +
+        '<div><small>Return</small><span class="' + cls(p.cashPnl) + '">' + (pct(p.percentPnl) || '\u2014') + '</span></div>' +
+        '<div><small>Shares</small>' + Number(p.size).toFixed(1) + '</div>' +
+        '<div><small>Avg &rarr; now</small>' + price(p.avgPrice) + ' &rarr; ' + price(p.curPrice) + '</div>' +
+        '<div><small>Resolves</small>' + dateShort(p.endDate) + '</div>' +
+        '</div></div>';
+    }).join('');
     box.innerHTML = '<div class="tablewrap"><table><thead><tr>' +
       '<th>Market</th><th>Side</th><th>Shares</th><th>Avg</th><th>Now</th><th>Value</th><th>P&amp;L</th><th>P&amp;L %</th><th>Resolves</th>' +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      '</tr></thead><tbody>' + rows + '</tbody></table></div><div class="cards">' + cards + '</div>';
   }
 
   function renderClosed(list){
@@ -313,7 +382,72 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
   }
 
   $('refresh').addEventListener('click', load);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
-  load();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && unlocked) load(); });
+
+  // ---- lock screen: passcode (SHA-256 of the PIN, remembered per device) or a platform passkey (Face ID / Touch ID)
+  const PIN_HASH = 'f34b72e14fb250dbedede1c2791e8def1a341d074ea2df3943621d8903e5d508';
+  const LS_OK = 'pl.ok', LS_CRED = 'pl.cred';
+  let unlocked = false, entered = '';
+  const ls = { get(k){ try { return (k === LS_OK ? sessionStorage : localStorage).getItem(k); } catch(e){ return null; } }, set(k,v){ try { (k === LS_OK ? sessionStorage : localStorage).setItem(k,v); } catch(e){} } };
+  const sha = async s => { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''); };
+  const b64 = a => btoa(String.fromCharCode(...new Uint8Array(a))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const unb64 = s => Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+  const rand = n => crypto.getRandomValues(new Uint8Array(n));
+  const canPasskey = () => !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
+
+  function drawPin(){ const dots = $('pin').children; for (let i = 0; i < 4; i++) dots[i].classList.toggle('on', i < entered.length); }
+  function msg(t){ $('lockmsg').textContent = t || ''; }
+  async function unlock(){
+    unlocked = true; $('lock').hidden = true; $('app').hidden = false; load();
+    if (canPasskey() && !ls.get(LS_CRED)){
+      msg('');
+      // offer Face ID enrolment once, after a successful passcode
+      setTimeout(async () => {
+        try {
+          const avail = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          if (!avail) return;
+          if (!confirm('Use Face ID / Touch ID to unlock this page next time?')) { ls.set(LS_CRED, 'declined'); return; }
+          const cred = await navigator.credentials.create({ publicKey: {
+            challenge: rand(32), rp: { name: 'Polybot Ledger', id: location.hostname },
+            user: { id: rand(16), name: 'polybot', displayName: 'Polybot Ledger' },
+            pubKeyCredParams: [{type:'public-key', alg:-7},{type:'public-key', alg:-257}],
+            authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+            timeout: 60000, attestation: 'none' } });
+          ls.set(LS_CRED, b64(cred.rawId));
+        } catch(e){ /* user cancelled or unsupported */ }
+      }, 800);
+    }
+  }
+  async function tryPin(){
+    if ((await sha(entered)) === PIN_HASH){ ls.set(LS_OK, '1'); unlock(); }
+    else { const p = $('pin'); p.classList.add('err'); msg('Wrong passcode'); setTimeout(() => { p.classList.remove('err'); entered = ''; drawPin(); }, 350); }
+  }
+  $('keys').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const k = b.dataset.k || b.textContent.trim();
+    if (k === 'clear') entered = ''; else if (k === 'del') entered = entered.slice(0,-1); else if (/^\d$/.test(k) && entered.length < 4) entered += k;
+    drawPin(); msg('');
+    if (entered.length === 4) tryPin();
+  });
+  document.addEventListener('keydown', e => {
+    if (unlocked) return;
+    if (/^\d$/.test(e.key) && entered.length < 4){ entered += e.key; drawPin(); if (entered.length === 4) tryPin(); }
+    else if (e.key === 'Backspace'){ entered = entered.slice(0,-1); drawPin(); }
+  });
+  async function faceId(){
+    const id = ls.get(LS_CRED); if (!id || id === 'declined') return;
+    try {
+      msg('');
+      const a = await navigator.credentials.get({ publicKey: { challenge: rand(32), rpId: location.hostname, userVerification: 'required', timeout: 60000,
+        allowCredentials: [{ type: 'public-key', id: unb64(id), transports: ['internal'] }] } });
+      if (a) unlock();
+    } catch(e){ msg('Face ID failed, use the passcode'); }
+  }
+  $('faceid').addEventListener('click', faceId);
+  const cred = ls.get(LS_CRED);
+  if (canPasskey() && cred && cred !== 'declined'){ $('faceid').hidden = false; faceId(); }
+  else if (ls.get(LS_OK) === '1'){ unlock(); }
 })();
 </script>
+</body>
+</html>
