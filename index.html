@@ -1,0 +1,319 @@
+<title>Polybot Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#fcfcfb; --surface:#ffffff; --surface-2:#f3f3f0; --line:#e3e2dc; --line-strong:#cfcec7;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8983;
+  --accent:#2a78d6; --accent-soft:#e4effb;
+  --good:#0ca30c; --good-soft:#e6f5e6; --bad:#d03b3b; --bad-soft:#fbe9e9;
+  --warn:#c98500; --warn-soft:#fff3d6;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#1a1a19; --surface:#222221; --surface-2:#2a2a28; --line:#33332f; --line-strong:#47463f;
+    --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8a8983;
+    --accent:#3987e5; --accent-soft:#1d2f47;
+    --good:#2fbf2f; --good-soft:#1c2e1c; --bad:#e66767; --bad-soft:#3a2020;
+    --warn:#fab219; --warn-soft:#3a3016;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#1a1a19; --surface:#222221; --surface-2:#2a2a28; --line:#33332f; --line-strong:#47463f;
+  --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8a8983;
+  --accent:#3987e5; --accent-soft:#1d2f47;
+  --good:#2fbf2f; --good-soft:#1c2e1c; --bad:#e66767; --bad-soft:#3a2020;
+  --warn:#fab219; --warn-soft:#3a3016;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding-block:12px 10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header.top h1{font-size:18px;font-weight:600;margin:0;letter-spacing:-.01em}
+header.top .addr{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:2px}
+header.top .spacer{flex:1}
+header.top .ctl{display:flex;align-items:center;gap:10px;white-space:nowrap}
+.updated{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.updated .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:6px;vertical-align:1px}
+.updated.stale .dot{background:var(--warn)}
+button.refresh{font:inherit;font-weight:500;font-size:13px;color:var(--accent);background:var(--accent-soft);border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.refresh:hover{filter:brightness(.96)}
+button.refresh:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.refresh[disabled]{opacity:.6;cursor:progress}
+.banner[hidden]{display:none!important}
+.banner{margin-top:14px;border:1px solid var(--bad);background:var(--bad-soft);color:var(--ink);border-radius:8px;padding:10px 12px;font-size:13px;display:flex;gap:10px;align-items:flex-start}
+.banner b{color:var(--bad)}
+.banner code{font-family:var(--mono);font-size:12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.tile .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);font-weight:500}
+.tile .val{font-family:var(--mono);font-size:22px;font-weight:500;line-height:1.2;margin-top:6px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .sub{font-family:var(--mono);font-size:12px;color:var(--ink-2);margin-top:3px;font-variant-numeric:tabular-nums}
+.tile.hero{grid-column:span 2}
+@media (max-width:420px){.tile.hero{grid-column:span 2}.tiles{grid-template-columns:1fr 1fr}}
+.pos{color:var(--good)} .neg{color:var(--bad)} .flat{color:var(--ink-2)}
+section{margin-top:28px}
+section h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);font-weight:600;margin:0 0 10px;display:flex;align-items:baseline;gap:10px}
+section h2 .count{font-family:var(--mono);font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+th,td{padding:9px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2);font-weight:500;background:var(--surface-2)}
+th:first-child,td:first-child{text-align:left}
+td.num{font-family:var(--mono)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--surface-2)}
+td.mkt{white-space:normal;min-width:240px;max-width:360px}
+td.mkt a{color:var(--ink);text-decoration:none;font-weight:500}
+td.mkt a:hover{color:var(--accent);text-decoration:underline}
+td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:4px;line-height:1.4;font-family:var(--font)}
+.chip.yes{background:var(--good-soft);color:var(--good)}
+.chip.no{background:var(--bad-soft);color:var(--bad)}
+.chip.side{background:var(--accent-soft);color:var(--accent)}
+.chip.resolved{background:var(--warn-soft);color:var(--warn);margin-left:6px}
+.empty{border:1px dashed var(--line-strong);border-radius:8px;padding:22px 16px;text-align:center;color:var(--ink-2);font-size:13px;background:var(--surface)}
+.list{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+.row{display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.row:last-child{border-bottom:0}
+.row .t{font-family:var(--mono);font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.row .m{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .m small{display:block;color:var(--ink-2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .r{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.row .r b{font-weight:500;color:var(--ink)}
+.note{font-size:12px;color:var(--ink-3);margin-top:8px}
+.skeleton{color:var(--ink-3)}
+@media (prefers-reduced-motion:no-preference){.tile .val{transition:color .2s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Polybot Ledger</h1>
+      <div class="addr" id="addr">0xe5FA&#x2026;939F &#xb7; Polygon</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="ctl">
+      <div class="updated" id="updated"><span class="dot"></span><span id="updated-text">Loading&#x2026;</span></div>
+      <button class="refresh" id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="tiles" id="tiles">
+    <div class="tile hero"><div class="lbl">Total equity</div><div class="val" id="t-equity">&#x2014;</div><div class="sub" id="t-equity-sub">cash + positions</div></div>
+    <div class="tile"><div class="lbl">Cash (pUSD)</div><div class="val" id="t-cash">&#x2014;</div><div class="sub">on Polygon</div></div>
+    <div class="tile"><div class="lbl">Positions value</div><div class="val" id="t-posval">&#x2014;</div><div class="sub" id="t-posval-sub">at current price</div></div>
+    <div class="tile"><div class="lbl">Unrealised P&amp;L</div><div class="val" id="t-unreal">&#x2014;</div><div class="sub" id="t-unreal-sub">vs cost basis</div></div>
+    <div class="tile"><div class="lbl">Realised P&amp;L</div><div class="val" id="t-real">&#x2014;</div><div class="sub" id="t-real-sub">closed markets</div></div>
+    <div class="tile"><div class="lbl">Open positions</div><div class="val" id="t-count">&#x2014;</div><div class="sub" id="t-count-sub">markets</div></div>
+  </div>
+
+  <section>
+    <h2>Open positions <span class="count" id="pos-count"></span></h2>
+    <div id="positions"><div class="empty skeleton">Loading positions&#x2026;</div></div>
+    <div class="note">Sorted by value. Resolved markets still held show a chip and are worth $1 or $0 per share until redeemed.</div>
+  </section>
+
+  <section>
+    <h2>Closed markets <span class="count" id="closed-count"></span></h2>
+    <div id="closed"><div class="empty skeleton">Loading&#x2026;</div></div>
+  </section>
+
+  <section>
+    <h2>Recent trades <span class="count" id="trade-count"></span></h2>
+    <div id="trades"><div class="empty skeleton">Loading&#x2026;</div></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const ADDR = '0xe5fa19af8d26f8ad6efd7d3ec1f5f34f2fc7939f';
+  const PUSD = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB';
+  const RPCS = ['https://polygon-bor-rpc.publicnode.com','https://1rpc.io/matic'];
+  const DATA = 'https://data-api.polymarket.com';
+  const REFRESH_MS = 60000;
+
+  const $ = id => document.getElementById(id);
+  const usd = (n, sign) => {
+    if (n == null || isNaN(n)) return '\u2014';
+    const s = (sign && n > 0 ? '+' : (n < 0 ? '\u2212' : '')) + '$' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
+    return s;
+  };
+  const pct = n => (n == null || isNaN(n)) ? '' : ((n > 0 ? '+' : (n < 0 ? '\u2212' : '')) + Math.abs(n).toFixed(1) + '%');
+  const cls = n => n > 0.005 ? 'pos' : (n < -0.005 ? 'neg' : 'flat');
+  const price = p => (p == null || isNaN(p)) ? '\u2014' : (p * 100).toFixed(1) + '\u00a2';
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const ago = ts => {
+    const d = Math.max(0, Date.now()/1000 - ts);
+    if (d < 60) return 'now';
+    if (d < 3600) return Math.floor(d/60) + 'm';
+    if (d < 86400) return Math.floor(d/3600) + 'h';
+    return Math.floor(d/86400) + 'd';
+  };
+  const dateShort = s => {
+    if (!s) return '\u2014';
+    const d = new Date(s.length === 10 ? s + 'T12:00:00Z' : s);
+    if (isNaN(d)) return esc(s);
+    return d.toLocaleDateString('en-US',{month:'short', day:'numeric'});
+  };
+  const mktUrl = p => p.slug ? 'https://polymarket.com/market/' + encodeURIComponent(p.slug) : (p.eventSlug ? 'https://polymarket.com/event/' + encodeURIComponent(p.eventSlug) : '#');
+
+  async function getJSON(url){
+    const r = await fetch(url, {cache:'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  async function fetchBalance(){
+    const data = '0x70a08231' + ADDR.slice(2).padStart(64, '0');
+    let lastErr;
+    for (const rpc of RPCS){
+      try {
+        const r = await fetch(rpc, {method:'POST', headers:{'content-type':'application/json'},
+          body: JSON.stringify({jsonrpc:'2.0', id:1, method:'eth_call', params:[{to:PUSD, data}, 'latest']})});
+        const j = await r.json();
+        if (j.error || !j.result) throw new Error(j.error ? j.error.message : 'empty result');
+        return Number(BigInt(j.result)) / 1e6;
+      } catch(e){ lastErr = e; }
+    }
+    throw lastErr || new Error('no RPC reachable');
+  }
+
+  function renderTiles(s){
+    const set = (id, txt, c) => { const el = $(id); el.textContent = txt; el.className = 'val' + (c ? ' ' + c : ''); };
+    set('t-cash', s.cash == null ? '\u2014' : usd(s.cash));
+    set('t-posval', s.positions == null ? '\u2014' : usd(s.posValue));
+    $('t-posval-sub').textContent = s.positions == null ? 'unavailable' : 'cost ' + usd(s.costBasis);
+    const eq = (s.cash == null || s.positions == null) ? null : s.cash + s.posValue;
+    set('t-equity', eq == null ? '\u2014' : usd(eq));
+    $('t-equity-sub').textContent = eq == null ? 'waiting on cash or positions' : 'cash + positions';
+    if (s.positions == null){ set('t-unreal','\u2014'); $('t-unreal-sub').textContent = 'unavailable'; }
+    else {
+      set('t-unreal', usd(s.unreal, true), cls(s.unreal));
+      const p = s.costBasis > 0 ? (s.unreal / s.costBasis) * 100 : null;
+      $('t-unreal-sub').textContent = p == null ? 'no cost basis' : pct(p) + ' vs cost basis';
+    }
+    if (s.closed == null){ set('t-real','\u2014'); $('t-real-sub').textContent = 'unavailable'; }
+    else { set('t-real', usd(s.real, true), cls(s.real)); $('t-real-sub').textContent = s.closed.length + ' closed market' + (s.closed.length === 1 ? '' : 's'); }
+    set('t-count', s.positions == null ? '\u2014' : String(s.positions.length));
+    $('t-count-sub').textContent = s.positions == null ? 'unavailable' : (s.resolvedCount ? s.resolvedCount + ' resolved, unredeemed' : 'markets');
+  }
+
+  function renderPositions(list){
+    const box = $('positions');
+    if (!list){ box.innerHTML = '<div class="empty">Could not load positions.</div>'; $('pos-count').textContent = ''; return; }
+    $('pos-count').textContent = list.length ? list.length : '';
+    if (!list.length){ box.innerHTML = '<div class="empty">No open positions yet. The bot has nothing on the book right now.</div>'; return; }
+    const rows = list.map(p => {
+      const resolved = p.redeemable || p.curPrice === 0 || p.curPrice === 1;
+      const side = String(p.outcome || '').toUpperCase();
+      const sideCls = /^(YES|UP)$/.test(side) ? 'yes' : (/^(NO|DOWN)$/.test(side) ? 'no' : 'side');
+      return '<tr>' +
+        '<td class="mkt"><a href="' + mktUrl(p) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a>' + (resolved ? '<span class="chip resolved">Resolved</span>' : '') + '</td>' +
+        '<td><span class="chip ' + sideCls + '">' + esc(side || '\u2014') + '</span></td>' +
+        '<td class="num">' + Number(p.size).toFixed(2) + '</td>' +
+        '<td class="num">' + price(p.avgPrice) + '</td>' +
+        '<td class="num">' + price(p.curPrice) + '</td>' +
+        '<td class="num">' + usd(p.currentValue) + '</td>' +
+        '<td class="num ' + cls(p.cashPnl) + '">' + usd(p.cashPnl, true) + '</td>' +
+        '<td class="num ' + cls(p.cashPnl) + '">' + pct(p.percentPnl) + '</td>' +
+        '<td>' + dateShort(p.endDate) + '</td>' +
+        '</tr>';
+    }).join('');
+    box.innerHTML = '<div class="tablewrap"><table><thead><tr>' +
+      '<th>Market</th><th>Side</th><th>Shares</th><th>Avg</th><th>Now</th><th>Value</th><th>P&amp;L</th><th>P&amp;L %</th><th>Resolves</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function renderClosed(list){
+    const box = $('closed');
+    if (!list){ box.innerHTML = '<div class="empty">Could not load closed markets.</div>'; $('closed-count').textContent = ''; return; }
+    $('closed-count').textContent = list.length ? list.length : '';
+    if (!list.length){ box.innerHTML = '<div class="empty">No closed markets yet.</div>'; return; }
+    const sorted = list.slice().sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
+    box.innerHTML = '<div class="list">' + sorted.map(p => {
+      const won = p.curPrice === 1;
+      return '<div class="row">' +
+        '<div class="t">' + (p.timestamp ? ago(p.timestamp) + ' ago' : '\u2014') + '</div>' +
+        '<div class="m"><a href="' + mktUrl(p) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">' + esc(p.title) + '</a>' +
+          '<small>' + esc(String(p.outcome||'').toUpperCase()) + ' \u00b7 avg ' + price(p.avgPrice) + ' \u00b7 $' + Number(p.totalBought||0).toFixed(2) + ' bought \u00b7 ' + (won ? 'settled $1' : (p.curPrice === 0 ? 'settled $0' : 'sold')) + '</small></div>' +
+        '<div class="r ' + cls(p.realizedPnl) + '"><b class="' + cls(p.realizedPnl) + '">' + usd(p.realizedPnl, true) + '</b></div>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  function renderTrades(list){
+    const box = $('trades');
+    if (!list){ box.innerHTML = '<div class="empty">Could not load trade history.</div>'; $('trade-count').textContent = ''; return; }
+    const trades = list.filter(a => a.type === 'TRADE').sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).slice(0, 30);
+    $('trade-count').textContent = trades.length ? 'last ' + trades.length : '';
+    if (!trades.length){ box.innerHTML = '<div class="empty">No trades yet.</div>'; return; }
+    box.innerHTML = '<div class="list">' + trades.map(t => {
+      const buy = t.side === 'BUY';
+      return '<div class="row">' +
+        '<div class="t">' + ago(t.timestamp) + ' ago</div>' +
+        '<div class="m">' + esc(t.title) + '<small><span class="chip ' + (buy ? 'yes' : 'no') + '">' + esc(t.side) + '</span> ' + esc(String(t.outcome||'').toUpperCase()) + ' @ ' + price(t.price) + '</small></div>' +
+        '<div class="r"><b>' + Number(t.size).toFixed(2) + ' sh</b><br>' + usd(t.usdcSize) + '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  function setBanner(fails){
+    const b = $('banner');
+    if (!fails.length){ b.hidden = true; b.innerHTML = ''; return; }
+    b.hidden = false;
+    b.innerHTML = '<b>Some data did not load.</b><div>' + fails.map(f => esc(f.name) + ': <code>' + esc(f.err) + '</code>').join('<br>') + '<br>Everything else is current. The page retries automatically every minute, or press Refresh.</div>';
+  }
+
+  let timer = null, busy = false;
+  async function load(){
+    if (busy) return; busy = true;
+    const btn = $('refresh'); btn.disabled = true; btn.textContent = 'Refreshing\u2026';
+    const q = 'user=' + ADDR;
+    const results = await Promise.allSettled([
+      getJSON(DATA + '/positions?' + q + '&sizeThreshold=0'),
+      getJSON(DATA + '/closed-positions?' + q),
+      getJSON(DATA + '/activity?' + q + '&limit=100'),
+      fetchBalance()
+    ]);
+    const names = ['Positions','Closed markets','Trade history','Cash balance'];
+    const fails = [];
+    const val = i => results[i].status === 'fulfilled' ? results[i].value : (fails.push({name:names[i], err: String(results[i].reason && results[i].reason.message || results[i].reason)}), null);
+    const positionsRaw = val(0), closed = val(1), activity = val(2), cash = val(3);
+
+    let positions = null, s = {cash, closed};
+    if (Array.isArray(positionsRaw)){
+      positions = positionsRaw.filter(p => Number(p.size) > 0).sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+      s.positions = positions;
+      s.posValue = positions.reduce((a,p) => a + (Number(p.currentValue)||0), 0);
+      s.costBasis = positions.reduce((a,p) => a + (Number(p.initialValue)||0), 0);
+      s.unreal = positions.reduce((a,p) => a + (Number(p.cashPnl)||0), 0);
+      s.resolvedCount = positions.filter(p => p.redeemable || p.curPrice === 0 || p.curPrice === 1).length;
+    }
+    if (Array.isArray(closed)) s.real = closed.reduce((a,p) => a + (Number(p.realizedPnl)||0), 0); else s.closed = null;
+
+    renderTiles(s);
+    renderPositions(positions);
+    renderClosed(Array.isArray(closed) ? closed : null);
+    renderTrades(Array.isArray(activity) ? activity : null);
+    setBanner(fails);
+
+    const now = new Date();
+    $('updated-text').textContent = 'Updated ' + now.toLocaleTimeString('en-US',{hour:'numeric', minute:'2-digit'});
+    $('updated').classList.toggle('stale', fails.length > 0);
+    btn.disabled = false; btn.textContent = 'Refresh'; busy = false;
+    clearTimeout(timer); timer = setTimeout(load, REFRESH_MS);
+  }
+
+  $('refresh').addEventListener('click', load);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+  load();
+})();
+</script>
