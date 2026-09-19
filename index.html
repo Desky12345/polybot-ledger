@@ -182,6 +182,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     <div class="tile"><div class="lbl">Unrealised P&amp;L</div><div class="val" id="t-unreal">&#x2014;</div><div class="sub" id="t-unreal-sub">vs cost basis</div></div>
     <div class="tile"><div class="lbl">Realised P&amp;L</div><div class="val" id="t-real">&#x2014;</div><div class="sub" id="t-real-sub">closed markets</div></div>
     <div class="tile"><div class="lbl">Open positions</div><div class="val" id="t-count">&#x2014;</div><div class="sub" id="t-count-sub">markets</div></div>
+    <div class="tile"><div class="lbl">If positions hit</div><div class="val" id="t-win">&#x2014;</div><div class="sub" id="t-win-sub">profit at resolution</div></div>
     <div class="tile"><div class="lbl">Trading P&amp;L</div><div class="val" id="t-trading">&#x2014;</div><div class="sub" id="t-trading-sub">equity minus money added</div></div>
     <div class="tile"><div class="lbl">Money added</div><div class="val" id="t-flows">&#x2014;</div><div class="sub" id="t-flows-sub">deposits less withdrawals</div></div>
   </div>
@@ -279,6 +280,13 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     if (s.closed == null){ set('t-real','\u2014'); $('t-real-sub').textContent = 'unavailable'; }
     else { set('t-real', usd(s.real, true), cls(s.real)); $('t-real-sub').textContent = s.closed.length + ' closed market' + (s.closed.length === 1 ? '' : 's'); }
     set('t-count', s.positions == null ? '\u2014' : String(s.positions.length));
+    if (s.positions == null || !s.positions.length){ set('t-win','\u2014'); $('t-win-sub').textContent = s.positions == null ? 'unavailable' : 'no open positions'; }
+    else {
+      const live = s.positions.filter(p => !(p.redeemable || p.curPrice === 0 || p.curPrice === 1));
+      const payout = live.reduce((a,p) => a + (Number(p.size)||0), 0), costL = live.reduce((a,p) => a + (Number(p.initialValue)||0), 0);
+      set('t-win', usd(payout - costL, true), cls(payout - costL));
+      $('t-win-sub').textContent = 'payout ' + usd(payout) + ' · lose ' + usd(costL) + ' if all miss';
+    }
     $('t-count-sub').textContent = s.positions == null ? 'unavailable' : (s.resolvedCount ? s.resolvedCount + ' resolved, unredeemed' : 'markets');
   }
 
@@ -300,6 +308,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
         '<td class="num">' + usd(p.currentValue) + '</td>' +
         '<td class="num ' + cls(p.cashPnl) + '">' + usd(p.cashPnl, true) + '</td>' +
         '<td class="num ' + cls(p.cashPnl) + '">' + pct(p.percentPnl) + '</td>' +
+        '<td class="num pos">' + usd(Number(p.size) - Number(p.initialValue||0), true) + '</td>' +
         '<td>' + dateShort(p.endDate) + '</td>' +
         '</tr>';
     }).join('');
@@ -315,10 +324,11 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
         '<div><small>Shares</small>' + Number(p.size).toFixed(1) + '</div>' +
         '<div><small>Avg &rarr; now</small>' + price(p.avgPrice) + ' &rarr; ' + price(p.curPrice) + '</div>' +
         '<div><small>Resolves</small>' + dateShort(p.endDate) + '</div>' +
+        '<div><small>If it hits</small><span class="pos">' + usd(Number(p.size) - Number(p.initialValue||0), true) + '</span></div>' +
         '</div></div>';
     }).join('');
     box.innerHTML = '<div class="tablewrap"><table><thead><tr>' +
-      '<th>Market</th><th>Side</th><th>Shares</th><th>Avg</th><th>Now</th><th>Value</th><th>P&amp;L</th><th>P&amp;L %</th><th>Resolves</th>' +
+      '<th>Market</th><th>Side</th><th>Shares</th><th>Avg</th><th>Now</th><th>Value</th><th>P&amp;L</th><th>P&amp;L %</th><th>If it hits</th><th>Resolves</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div><div class="cards">' + cards + '</div>';
   }
 
