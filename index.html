@@ -199,6 +199,17 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     <div class="note">Sorted by value. Resolved markets still held show a chip and are worth $1 or $0 per share until redeemed.</div>
   </section>
 
+  <section id="sniper">
+    <h2>BTC 15-min sniper <span class="count" id="sniper-count">experiment</span></h2>
+    <div class="tiles" style="margin-top:0">
+      <div class="tile"><div class="lbl">Sniper P&amp;L</div><div class="val" id="s-pnl">&#x2014;</div><div class="sub" id="s-pnl-sub">$20 per window</div></div>
+      <div class="tile"><div class="lbl">Win rate</div><div class="val" id="s-win">&#x2014;</div><div class="sub" id="s-win-sub">settled trades</div></div>
+      <div class="tile"><div class="lbl">Avg entry</div><div class="val" id="s-entry">&#x2014;</div><div class="sub">price paid for the near-certain side</div></div>
+    </div>
+    <div id="sniper-list" style="margin-top:10px"><div class="empty skeleton">Loading&#x2026;</div></div>
+    <div class="note">Separate from the judgment trades above. Buys the side the window's average price has already locked in, only when the market still prices it under 94&#xa2;. Wins are small and frequent; a loss costs the whole stake.</div>
+  </section>
+
   <section>
     <h2>Closed markets <span class="count" id="closed-count"></span></h2>
     <div id="closed"><div class="empty skeleton">Loading&#x2026;</div></div>
@@ -444,6 +455,26 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     $('t-flows-sub').textContent = (open ? 'opening balance + ' : '') + deps + ' deposit' + (deps === 1 ? '' : 's') + (wds ? ', ' + wds + ' withdrawal' + (wds === 1 ? '' : 's') : '');
   }
 
+  function renderSniper(data){
+    const box = $('sniper-list');
+    const set = (id, txt, c) => { const el = $(id); el.textContent = txt; el.className = 'val' + (c ? ' ' + c : ''); };
+    if (!data || !Array.isArray(data.trades)){ box.innerHTML = '<div class="empty">Sniper data not available.</div>'; return; }
+    const t = data.trades, settled = t.filter(x => x.won === true || x.won === false);
+    const pnl = settled.reduce((a,x) => a + (Number(x.pnl)||0), 0), wins = settled.filter(x => x.won).length;
+    set('s-pnl', settled.length ? usd(pnl, true) : '\u2014', cls(pnl));
+    $('s-pnl-sub').textContent = t.length + ' trade' + (t.length === 1 ? '' : 's') + ', ' + (t.length - settled.length) + ' open';
+    set('s-win', settled.length ? Math.round(wins / settled.length * 100) + '%' : '\u2014');
+    $('s-win-sub').textContent = wins + ' won, ' + (settled.length - wins) + ' lost';
+    set('s-entry', t.length ? price(t.reduce((a,x) => a + x.price, 0) / t.length) : '\u2014');
+    $('sniper-count').textContent = 'experiment · ' + (data.decisions||0) + ' windows watched';
+    if (!t.length){ box.innerHTML = '<div class="empty">No sniper trades yet. It only fires when a window is already decided but still priced under 94\u00a2.</div>'; return; }
+    box.innerHTML = '<div class="list">' + t.slice(0, 25).map(x => {
+      const st = x.won === true ? '<span class="chip yes">WON</span>' : (x.won === false ? '<span class="chip no">LOST</span>' : '<span class="chip side">OPEN</span>');
+      const win = x.won === true || x.won === false ? '<b class="' + cls(x.pnl) + '">' + usd(x.pnl, true) + '</b>' : '<b>' + usd(x.shares - x.cost, true) + ' if it hits</b>';
+      return '<div class="row"><div class="t">' + ago(x.ts) + ' ago</div><div class="m">' + esc(x.question.replace('Bitcoin Up or Down - ','')) + '<small>' + esc(x.side) + ' @ ' + price(x.price) + ' \u00b7 ' + Number(x.shares).toFixed(1) + ' sh \u00b7 ' + usd(x.cost) + ' ' + st + '</small></div><div class="r">' + win + '</div></div>';
+    }).join('') + '</div>';
+  }
+
   function setBanner(fails){
     const b = $('banner');
     if (!fails.length){ b.hidden = true; b.innerHTML = ''; return; }
@@ -463,12 +494,13 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
       getJSON(DATA + '/closed-positions?' + q),
       getJSON(DATA + '/activity?' + q + '&limit=500'),
       fetchBalance(),
-      getJSON('data/history.json?t=' + Date.now())
+      getJSON('data/history.json?t=' + Date.now()),
+      getJSON('data/twap.json?t=' + Date.now())
     ]);
-    const names = ['Positions','Closed markets','Trade history','Cash balance','Portfolio history'];
+    const names = ['Positions','Closed markets','Trade history','Cash balance','Portfolio history','Sniper log'];
     const fails = [];
     const val = i => results[i].status === 'fulfilled' ? results[i].value : (fails.push({name:names[i], err: String(results[i].reason && results[i].reason.message || results[i].reason)}), null);
-    const positionsRaw = val(0), closed = val(1), activity = val(2), cash = val(3), history = val(4);
+    const positionsRaw = val(0), closed = val(1), activity = val(2), cash = val(3), history = val(4), sniper = val(5);
 
     let positions = null, s = {cash, closed};
     if (Array.isArray(positionsRaw)){
@@ -491,6 +523,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     const eqNow = (s.cash == null || s.positions == null) ? null : s.cash + s.posValue;
     renderFlowTiles(history, eqNow);
     renderChart(history);
+    renderSniper(sniper);
     renderPositions(positions);
     renderClosed(Array.isArray(closed) ? closed : null);
     renderTrades(Array.isArray(activity) ? activity : null);
