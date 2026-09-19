@@ -302,6 +302,8 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
       return '<tr>' +
         '<td class="mkt"><a href="' + mktUrl(p) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a>' + (resolved ? '<span class="chip resolved">Resolved</span>' : '') + '</td>' +
         '<td><span class="chip ' + sideCls + '">' + esc(side || '\u2014') + '</span></td>' +
+        '<td>' + esc(boughtText(p).date) + (boughtText(p).detail ? '<br><small style="color:var(--ink-3)">' + esc(boughtText(p).detail) + '</small>' : '') + '</td>' +
+        '<td class="num">' + usd(p.initialValue) + '</td>' +
         '<td class="num">' + Number(p.size).toFixed(2) + '</td>' +
         '<td class="num">' + price(p.avgPrice) + '</td>' +
         '<td class="num">' + price(p.curPrice) + '</td>' +
@@ -321,6 +323,8 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
         '<div><small>P&amp;L</small><span class="pl ' + cls(p.cashPnl) + '">' + usd(p.cashPnl, true) + '</span></div>' +
         '<div><small>Value</small>' + usd(p.currentValue) + '</div>' +
         '<div><small>Return</small><span class="' + cls(p.cashPnl) + '">' + (pct(p.percentPnl) || '\u2014') + '</span></div>' +
+        '<div><small>Bought</small>' + esc(boughtText(p).date) + '</div>' +
+        '<div><small>Cost</small>' + usd(p.initialValue) + '</div>' +
         '<div><small>Shares</small>' + Number(p.size).toFixed(1) + '</div>' +
         '<div><small>Avg &rarr; now</small>' + price(p.avgPrice) + ' &rarr; ' + price(p.curPrice) + '</div>' +
         '<div><small>Resolves</small>' + dateShort(p.endDate) + '</div>' +
@@ -328,7 +332,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
         '</div></div>';
     }).join('');
     box.innerHTML = '<div class="tablewrap"><table><thead><tr>' +
-      '<th>Market</th><th>Side</th><th>Shares</th><th>Avg</th><th>Now</th><th>Value</th><th>P&amp;L</th><th>P&amp;L %</th><th>If it hits</th><th>Resolves</th>' +
+      '<th>Market</th><th>Side</th><th>Bought</th><th>Cost</th><th>Shares</th><th>Avg</th><th>Now</th><th>Value</th><th>P&amp;L</th><th>P&amp;L %</th><th>If it hits</th><th>Resolves</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div><div class="cards">' + cards + '</div>';
   }
 
@@ -447,7 +451,9 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     b.innerHTML = '<b>Some data did not load.</b><div>' + fails.map(f => esc(f.name) + ': <code>' + esc(f.err) + '</code>').join('<br>') + '<br>Everything else is current. The page retries automatically every minute, or press Refresh.</div>';
   }
 
-  let timer = null, busy = false;
+  let timer = null, busy = false, buyInfo = {};
+  const when = ts => new Date(ts*1000).toLocaleString('en-US',{month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+  const boughtText = p => { const b = buyInfo[p.conditionId + '|' + String(p.outcome||'').toUpperCase()]; if (!b) return {date:'\u2014', detail:''}; return {date: when(b.first), detail: b.fills > 1 ? b.fills + ' fills, last ' + when(b.last) : ''}; };
   async function load(){
     if (busy) return; busy = true;
     const btn = $('refresh'); btn.disabled = true; btn.textContent = 'Refreshing\u2026';
@@ -455,7 +461,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     const results = await Promise.allSettled([
       getJSON(DATA + '/positions?' + q + '&sizeThreshold=0'),
       getJSON(DATA + '/closed-positions?' + q),
-      getJSON(DATA + '/activity?' + q + '&limit=100'),
+      getJSON(DATA + '/activity?' + q + '&limit=500'),
       fetchBalance(),
       getJSON('data/history.json?t=' + Date.now())
     ]);
@@ -475,6 +481,12 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     }
     if (Array.isArray(closed)) s.real = closed.reduce((a,p) => a + (Number(p.realizedPnl)||0), 0); else s.closed = null;
 
+    buyInfo = {};
+    if (Array.isArray(activity)) activity.filter(a => a.type === 'TRADE' && a.side === 'BUY').forEach(t => {
+      const k = t.conditionId + '|' + String(t.outcome||'').toUpperCase();
+      const b = buyInfo[k] || (buyInfo[k] = {first: t.timestamp, last: t.timestamp, fills: 0, usd: 0, shares: 0});
+      b.first = Math.min(b.first, t.timestamp); b.last = Math.max(b.last, t.timestamp); b.fills++; b.usd += Number(t.usdcSize)||0; b.shares += Number(t.size)||0;
+    });
     renderTiles(s);
     const eqNow = (s.cash == null || s.positions == null) ? null : s.cash + s.posValue;
     renderFlowTiles(history, eqNow);
