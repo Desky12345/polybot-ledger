@@ -97,6 +97,19 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
 .note{font-size:12px;color:var(--ink-3);margin-top:8px}
 .skeleton{color:var(--ink-3)}
 @media (prefers-reduced-motion:no-preference){.tile .val{transition:color .2s}}
+/* portfolio chart */
+.chartwrap{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 8px 4px;overflow:hidden}
+.chartwrap svg{display:block;width:100%;height:auto;font-family:var(--font)}
+.chartwrap .axis{fill:var(--ink-3);font-size:10px}
+.chartwrap .grid{stroke:var(--line);stroke-width:1}
+.chartwrap .line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chartwrap .area{fill:var(--accent);opacity:.08}
+.chartwrap .last{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
+.chartwrap .lastlbl{fill:var(--ink);font-family:var(--mono);font-size:11px;font-weight:500}
+.chartwrap .flow{fill:var(--warn);stroke:var(--surface);stroke-width:1}
+.chartwrap .flowlbl{fill:var(--ink-2);font-family:var(--mono);font-size:10px}
+.chartwrap .cross{stroke:var(--line-strong);stroke-width:1;stroke-dasharray:3 3}
+.chartwrap .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:11px;padding:5px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-120%);display:none}
 /* lock screen */
 #lock{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
 #lock[hidden]{display:none}
@@ -169,7 +182,15 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     <div class="tile"><div class="lbl">Unrealised P&amp;L</div><div class="val" id="t-unreal">&#x2014;</div><div class="sub" id="t-unreal-sub">vs cost basis</div></div>
     <div class="tile"><div class="lbl">Realised P&amp;L</div><div class="val" id="t-real">&#x2014;</div><div class="sub" id="t-real-sub">closed markets</div></div>
     <div class="tile"><div class="lbl">Open positions</div><div class="val" id="t-count">&#x2014;</div><div class="sub" id="t-count-sub">markets</div></div>
+    <div class="tile"><div class="lbl">Trading P&amp;L</div><div class="val" id="t-trading">&#x2014;</div><div class="sub" id="t-trading-sub">equity minus money added</div></div>
+    <div class="tile"><div class="lbl">Money added</div><div class="val" id="t-flows">&#x2014;</div><div class="sub" id="t-flows-sub">deposits less withdrawals</div></div>
   </div>
+
+  <section>
+    <h2>Portfolio <span class="count" id="chart-range"></span></h2>
+    <div class="chartwrap" id="chart"><div class="empty skeleton">Loading history&#x2026;</div></div>
+    <div class="note">Equity over time. Markers show money added (&#x25B2;) or withdrawn (&#x25BC;), so the line moves on trading only in between.</div>
+  </section>
 
   <section>
     <h2>Open positions <span class="count" id="pos-count"></span></h2>
@@ -334,6 +355,77 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     }).join('') + '</div>';
   }
 
+  function renderChart(data){
+    const box = $('chart');
+    if (!data || !Array.isArray(data.equity) || data.equity.length < 2){ box.innerHTML = '<div class="empty">Not enough history yet. The bot records a point every 30 minutes.</div>'; return; }
+    const pts = data.equity.slice().sort((a,b) => a.ts - b.ts);
+    const flows = (data.flows || []).filter(f => f.kind !== 'opening').sort((a,b) => a.ts - b.ts);
+    const W = 720, H = 260, L = 44, R = 64, T = 18, B = 26;
+    const x0 = pts[0].ts, x1 = pts[pts.length-1].ts;
+    const ys = pts.map(p => p.total);
+    let lo = Math.min(...ys), hi = Math.max(...ys);
+    const pad = Math.max((hi - lo) * 0.15, 5); lo -= pad; hi += pad;
+    const X = t => L + (t - x0) / Math.max(1, x1 - x0) * (W - L - R);
+    const Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+    const fmt = v => '$' + Math.round(v).toLocaleString('en-US');
+    const spanDays = (x1 - x0) / 86400;
+    const fmtT = t => new Date(t*1000).toLocaleString('en-US', spanDays > 3 ? {month:'short', day:'numeric'} : {weekday:'short', hour:'numeric', minute:'2-digit'});
+    let g = '';
+    const ticks = 4;
+    for (let i = 0; i <= ticks; i++){
+      const v = lo + (hi - lo) * i / ticks, y = Y(v);
+      g += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '"/>' +
+           '<text class="axis" x="' + (L - 6) + '" y="' + (y + 3.5) + '" text-anchor="end">' + fmt(v) + '</text>';
+    }
+    for (let i = 0; i <= 3; i++){
+      const t = x0 + (x1 - x0) * i / 3;
+      g += '<text class="axis" x="' + X(t) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? 'start' : (i === 3 ? 'end' : 'middle')) + '">' + esc(fmtT(t)) + '</text>';
+    }
+    const path = pts.map((p, i) => (i ? 'L' : 'M') + X(p.ts).toFixed(1) + ' ' + Y(p.total).toFixed(1)).join(' ');
+    const area = path + ' L' + X(x1).toFixed(1) + ' ' + (H - B) + ' L' + X(x0).toFixed(1) + ' ' + (H - B) + ' Z';
+    g += '<path class="area" d="' + area + '"/><path class="line" d="' + path + '"/>';
+    flows.forEach(f => {
+      if (f.ts < x0 - 3600 || f.ts > x1 + 3600) return;
+      const near = pts.reduce((a, p) => Math.abs(p.ts - f.ts) < Math.abs(a.ts - f.ts) ? p : a, pts[0]);
+      const x = X(Math.min(Math.max(f.ts, x0), x1)), y = Y(near.total);
+      const up = f.kind !== 'withdrawal';
+      const tri = up ? (x + ',' + (y - 14) + ' ' + (x - 6) + ',' + (y - 4) + ' ' + (x + 6) + ',' + (y - 4)) : (x + ',' + (y + 14) + ' ' + (x - 6) + ',' + (y + 4) + ' ' + (x + 6) + ',' + (y + 4));
+      g += '<polygon class="flow" points="' + tri + '"><title>' + esc((up ? 'Deposit ' : 'Withdrawal ') + fmt(f.amount) + ' · ' + fmtT(f.ts)) + '</title></polygon>' +
+           '<text class="flowlbl" x="' + x + '" y="' + (up ? y - 18 : y + 26) + '" text-anchor="middle">' + (up ? '+' : '\u2212') + fmt(f.amount) + '</text>';
+    });
+    const lx = X(x1), ly = Y(pts[pts.length-1].total);
+    g += '<circle class="last" cx="' + lx + '" cy="' + ly + '" r="4"/><text class="lastlbl" x="' + (lx + 8) + '" y="' + (ly + 4) + '">' + fmt(pts[pts.length-1].total) + '</text>';
+    g += '<line class="cross" id="cross" x1="0" x2="0" y1="' + T + '" y2="' + (H - B) + '" style="display:none"/>';
+    box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" id="chart-svg" role="img" aria-label="Portfolio equity over time">' + g + '</svg><div class="tip" id="tip"></div>';
+    $('chart-range').textContent = fmtT(x0) + ' \u2192 now';
+    const svg = $('chart-svg'), tip = $('tip'), cross = $('cross');
+    const onMove = ev => {
+      const r = svg.getBoundingClientRect();
+      const cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      const t = x0 + (cx / r.width * W - L) / (W - L - R) * (x1 - x0);
+      const p = pts.reduce((a, q) => Math.abs(q.ts - t) < Math.abs(a.ts - t) ? q : a, pts[0]);
+      const px = X(p.ts), py = Y(p.total);
+      cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.style.display = '';
+      tip.style.display = 'block'; tip.style.left = (px / W * r.width) + 'px'; tip.style.top = (py / H * r.height + 10) + 'px';
+      tip.textContent = fmtT(p.ts) + ' \u00b7 ' + usd(p.total) + (p.cash != null ? ' (cash ' + usd(p.cash) + ')' : '');
+    };
+    svg.addEventListener('mousemove', onMove); svg.addEventListener('touchmove', onMove, {passive:true});
+    svg.addEventListener('mouseleave', () => { tip.style.display = 'none'; cross.style.display = 'none'; });
+  }
+
+  function renderFlowTiles(data, equity){
+    const set = (id, txt, c) => { const el = $(id); el.textContent = txt; el.className = 'val' + (c ? ' ' + c : ''); };
+    const flows = (data && data.flows) || [];
+    if (!flows.length || equity == null){ set('t-trading','\u2014'); set('t-flows','\u2014'); return; }
+    const net = flows.reduce((a, f) => a + (f.kind === 'withdrawal' ? -f.amount : f.amount), 0);
+    const trading = equity - net;
+    set('t-trading', usd(trading, true), cls(trading));
+    $('t-trading-sub').textContent = net > 0 ? pct(trading / net * 100) + ' on money added' : 'equity minus money added';
+    set('t-flows', usd(net));
+    const deps = flows.filter(f => f.kind !== 'withdrawal').length, wds = flows.filter(f => f.kind === 'withdrawal').length;
+    $('t-flows-sub').textContent = deps + ' deposit' + (deps === 1 ? '' : 's') + (wds ? ', ' + wds + ' withdrawal' + (wds === 1 ? '' : 's') : '');
+  }
+
   function setBanner(fails){
     const b = $('banner');
     if (!fails.length){ b.hidden = true; b.innerHTML = ''; return; }
@@ -350,12 +442,13 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
       getJSON(DATA + '/positions?' + q + '&sizeThreshold=0'),
       getJSON(DATA + '/closed-positions?' + q),
       getJSON(DATA + '/activity?' + q + '&limit=100'),
-      fetchBalance()
+      fetchBalance(),
+      getJSON('data/history.json?t=' + Date.now())
     ]);
-    const names = ['Positions','Closed markets','Trade history','Cash balance'];
+    const names = ['Positions','Closed markets','Trade history','Cash balance','Portfolio history'];
     const fails = [];
     const val = i => results[i].status === 'fulfilled' ? results[i].value : (fails.push({name:names[i], err: String(results[i].reason && results[i].reason.message || results[i].reason)}), null);
-    const positionsRaw = val(0), closed = val(1), activity = val(2), cash = val(3);
+    const positionsRaw = val(0), closed = val(1), activity = val(2), cash = val(3), history = val(4);
 
     let positions = null, s = {cash, closed};
     if (Array.isArray(positionsRaw)){
@@ -369,6 +462,9 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     if (Array.isArray(closed)) s.real = closed.reduce((a,p) => a + (Number(p.realizedPnl)||0), 0); else s.closed = null;
 
     renderTiles(s);
+    const eqNow = (s.cash == null || s.positions == null) ? null : s.cash + s.posValue;
+    renderFlowTiles(history, eqNow);
+    renderChart(history);
     renderPositions(positions);
     renderClosed(Array.isArray(closed) ? closed : null);
     renderTrades(Array.isArray(activity) ? activity : null);
