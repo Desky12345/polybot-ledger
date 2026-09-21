@@ -208,6 +208,17 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     <div class="note">Sorted by value. Resolved markets still held show a chip and are worth $1 or $0 per share until redeemed.</div>
   </section>
 
+  <section id="mm">
+    <h2>Market maker <span class="count" id="mm-count">$100 experiment</span></h2>
+    <div class="tiles" style="margin-top:0">
+      <div class="tile"><div class="lbl">Locked spread</div><div class="val" id="m-locked">&#x2014;</div><div class="sub" id="m-locked-sub">matched pairs</div></div>
+      <div class="tile"><div class="lbl">Rewards today</div><div class="val" id="m-rew">&#x2014;</div><div class="sub">liquidity programme</div></div>
+      <div class="tile"><div class="lbl">Inventory</div><div class="val" id="m-inv">&#x2014;</div><div class="sub" id="m-inv-sub">unmatched, at risk</div></div>
+    </div>
+    <div id="mm-list" style="margin-top:10px"><div class="empty skeleton">Loading&#x2026;</div></div>
+    <div class="note">Quotes both sides of a few books. A matched pair costs under $1 and pays $1, so the spread is locked profit. Unmatched inventory is the real risk: it means one side filled and the market moved.</div>
+  </section>
+
   <section id="sniper">
     <h2>BTC 15-min sniper <span class="count" id="sniper-count">experiment</span></h2>
     <div class="tiles" style="margin-top:0">
@@ -481,6 +492,28 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     $('t-flows-sub').textContent = (open ? 'opening balance + ' : '') + deps + ' deposit' + (deps === 1 ? '' : 's') + (wds ? ', ' + wds + ' withdrawal' + (wds === 1 ? '' : 's') : '');
   }
 
+  function renderMM(data){
+    const box = $('mm-list');
+    const set = (id, txt, c) => { const el = $(id); el.textContent = txt; el.className = 'val' + (c ? ' ' + c : ''); };
+    if (!data || !Array.isArray(data.markets)){ box.innerHTML = '<div class="empty">Market maker not running.</div>'; return; }
+    set('m-locked', usd(data.locked_profit || 0, true), cls(data.locked_profit || 0));
+    const pairs = data.markets.reduce((a,m) => a + (Number(m.locked_pairs)||0), 0);
+    $('m-locked-sub').textContent = pairs ? pairs.toFixed(0) + ' matched pairs' : 'no matched pairs yet';
+    set('m-rew', data.rewards_today == null ? '\u2014' : usd(data.rewards_today));
+    let invAbs = 0;
+    data.markets.forEach(m => { const p = Math.min(m.inv_yes||0, m.inv_no||0); invAbs += (m.inv_yes||0) - p + (m.inv_no||0) - p; });
+    set('m-inv', invAbs ? invAbs.toFixed(0) + ' sh' : '0');
+    $('m-inv-sub').textContent = invAbs ? 'unmatched, directional' : 'fully matched or unfilled';
+    $('mm-count').textContent = usd(data.capital || 0) + ' committed \u00b7 ' + (data.n_quotes||0) + ' quotes, ' + (data.n_fills||0) + ' fills';
+    box.innerHTML = '<div class="list">' + data.markets.map(m => {
+      const p = Math.min(m.inv_yes||0, m.inv_no||0);
+      const un = ((m.inv_yes||0) - p) + ((m.inv_no||0) - p);
+      return '<div class="row"><div class="t">' + (m.spread*100).toFixed(1) + '\u00a2</div>' +
+        '<div class="m">' + esc(m.q) + '<small>' + usd(m.size||0) + ' quoted \u00b7 pool ' + usd(m.pool) + '/day \u00b7 ' + Number(m.days).toFixed(0) + 'd \u00b7 ' + (m.fills||0) + ' fills</small></div>' +
+        '<div class="r">' + (p ? '<b class="pos">' + p.toFixed(0) + ' paired</b>' : '<b style="color:var(--ink-3)">unfilled</b>') + (un ? '<br><span class="neg">' + un.toFixed(0) + ' sh open</span>' : '') + '</div></div>';
+    }).join('') + '</div>';
+  }
+
   function renderSniper(data){
     const box = $('sniper-list');
     const set = (id, txt, c) => { const el = $(id); el.textContent = txt; el.className = 'val' + (c ? ' ' + c : ''); };
@@ -530,13 +563,15 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
       fetchBalance(),
       getJSON('data/history.json?t=' + Date.now()),
       getJSON('data/twap.json?t=' + Date.now()),
+      getJSON('data/mm.json?t=' + Date.now()),
       getJSON('data/snapshot.json?t=' + Date.now())
     ]);
-    const names = ['Positions','Closed markets','Trade history','Cash balance','Portfolio history','Sniper log','Snapshot'];
+    const names = ['Positions','Closed markets','Trade history','Cash balance','Portfolio history','Sniper log','Market maker','Snapshot'];
     const fails = [];
     const val = i => results[i].status === 'fulfilled' ? results[i].value : (fails.push({name:names[i], err: String(results[i].reason && results[i].reason.message || results[i].reason)}), null);
     let positionsRaw = val(0), closed = val(1), activity = val(2), cash = val(3), history = val(4), sniper = val(5);
-    const snap = results[6].status === 'fulfilled' ? results[6].value : null;
+    const mmData = results[6].status === 'fulfilled' ? results[6].value : null;
+    const snap = results[7].status === 'fulfilled' ? results[7].value : null;
     // Polymarket's API is unreachable from some countries (e.g. Australia). Fall back to the snapshot the bot publishes every 10 minutes.
     let usedSnapshot = false;
     if (snap){
@@ -546,7 +581,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
       if (cash == null && snap.cash != null){ cash = Number(snap.cash); usedSnapshot = true; }
       if (usedSnapshot){ for (let i = fails.length - 1; i >= 0; i--) if (/Positions|Closed|Trade history|Cash|Snapshot/.test(fails[i].name)) fails.splice(i, 1); }
     }
-    for (let i = fails.length - 1; i >= 0; i--) if (fails[i].name === 'Snapshot') fails.splice(i, 1);
+    for (let i = fails.length - 1; i >= 0; i--) if (fails[i].name === 'Snapshot' || fails[i].name === 'Market maker') fails.splice(i, 1);
 
     let positions = null, s = {cash, closed};
     if (Array.isArray(positionsRaw)){
@@ -569,6 +604,7 @@ td.mkt a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border
     const eqNow = (s.cash == null || s.positions == null) ? null : s.cash + s.posValue;
     renderFlowTiles(history, eqNow);
     renderChart(history);
+    renderMM(mmData);
     renderSniper(sniper);
     renderPositions(positions);
     renderClosed(Array.isArray(closed) ? closed : null);
